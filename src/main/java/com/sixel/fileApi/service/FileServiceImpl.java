@@ -15,7 +15,6 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -29,6 +28,8 @@ import com.sixel.fileApi.model.StoredFile;
 @Service
 public class FileServiceImpl implements FileService {
 
+	private static final String ORIGINALFILE_SUBDIRECTORY = "bin";
+	
 	@Autowired
 	private CompressService compressService;
 	
@@ -55,23 +56,43 @@ public class FileServiceImpl implements FileService {
 	}
 	
 	/**
+	 * @return
+	 * @throws IOException
+	 */
+	private Pair<UUID, Path> allocateUUID() throws IOException {
+		UUID uuid;
+		Path uuidFolderPath;
+		
+		do {
+			uuid = UUID.randomUUID();
+			uuidFolderPath = uploadFolderPath.resolve(uuid.toString());
+		} while (Files.exists(uuidFolderPath));
+		Files.createDirectory(uuidFolderPath);
+		return new ImmutablePair<UUID, Path>(uuid, uuidFolderPath);
+	}
+	
+	/**
 	 * {@inheritDoc}
 	 */
 	public StoredFile store(final MultipartFile multipartFile) throws IOException {
 		final StoredFile storedFile = new StoredFile();
 		final Pair<UUID, Path> pair;
-		final Path contentTypeFile;
+		final Path contentTypeFilePath;
+		final Path originalStoreFolderPath;
 		
 		storedFile.setName(multipartFile.getOriginalFilename());
 		storedFile.setSize(multipartFile.getSize());
 		storedFile.setContentType(multipartFile.getContentType());
 		pair = allocateUUID();
 		storedFile.setUuid(pair.getKey());
-		storedFile.setPath(pair.getValue().resolve(storedFile.getName()));	
-		Files.write(storedFile.getPath(), multipartFile.getBytes());
 		
-		contentTypeFile = pair.getValue().resolve(contentTypeFilename);
-		Files.write(contentTypeFile, multipartFile.getContentType().toString().getBytes());
+		contentTypeFilePath = pair.getValue().resolve(contentTypeFilename);
+		Files.write(contentTypeFilePath, multipartFile.getContentType().toString().getBytes());
+		
+		originalStoreFolderPath = pair.getValue().resolve(ORIGINALFILE_SUBDIRECTORY);
+		Files.createDirectory(originalStoreFolderPath);
+		storedFile.setPath(originalStoreFolderPath.resolve(storedFile.getName()));	
+		Files.write(storedFile.getPath(), multipartFile.getBytes());
 		
 		return storedFile;
 	}
@@ -121,6 +142,7 @@ public class FileServiceImpl implements FileService {
 	public StoredFile findByUUID(final UUID uuid) throws IOException {
 		final StoredFile storedFile;
 		final Path uuidFolderPath;
+		final Path originalStoreFolderPath;
 		final Path filePath;
 		final Path contentTypeFile;
 		
@@ -133,7 +155,8 @@ public class FileServiceImpl implements FileService {
 		storedFile = new StoredFile();
 		storedFile.setUuid(uuid);
 		
-		filePath = Files.list(uuidFolderPath).
+		originalStoreFolderPath = uuidFolderPath.resolve(ORIGINALFILE_SUBDIRECTORY);
+		filePath = Files.list(originalStoreFolderPath).
 				filter(f -> !f.getFileName().toString().equals(contentTypeFilename) ).
 				reduce(null, (accumulator, f) -> f);
 		
@@ -150,21 +173,6 @@ public class FileServiceImpl implements FileService {
 		
 		return storedFile;
 	}
-	
-	/**
-	 * @return
-	 * @throws IOException
-	 */
-	private synchronized Pair<UUID, Path> allocateUUID() throws IOException {
-		UUID uuid;
-		Path uuidFolderPath;
-		
-		do {
-			uuid = UUID.randomUUID();
-			uuidFolderPath = uploadFolderPath.resolve(uuid.toString());
-		} while (Files.exists(uuidFolderPath));
-		Files.createDirectory(uuidFolderPath);
-		return new ImmutablePair<UUID, Path>(uuid, uuidFolderPath);
-	}
+
 
 }

@@ -32,7 +32,7 @@ import com.sixel.fileApi.service.FileService;
  *
  */
 @RestController
-@RequestMapping("file")
+@RequestMapping("api/file/v1")
 public class FileController {
 	
 	@Autowired
